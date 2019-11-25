@@ -1,0 +1,189 @@
+"""
+
+This program takes files form a folder in  C:/Users/arun_lalksankar/Documents/Indexed_Docs-ARUN/
+so all Documents need to be in a Folder in the above directory
+so we get C:/Users/arun_lalksankar/Documents/Indexed_Docs-ARUN/Folder_Name and inside this folder pdfs are kept
+once the program is run the pdfs in the Folder need to be removed manually.
+    if the PDFs are kept in the same folder then their pages will be taken again.
+
+Dont forget to run CleanUp.py after this program is run.
+
+"""
+
+
+import os                           # Execution of external Script - os.system()
+import PyPDF2                       # Extraction of Bookmarks
+import datetime                     # To check if date is present in BookMark name.
+import shutil                       # To copy image to both Training and Validation folder
+import time
+"""     FUNCTIONS    """
+
+
+def bookmark_dict(bookmark_list):
+    """ Used to get the bookmarks form the pdf"""
+    result = {}
+    for item in bookmark_list:
+        if isinstance(item, list):
+            # recursive call
+            result.update(bookmark_dict(item))
+        else:
+            result[reader.getDestinationPageNumber(item)] = item.title
+    return result
+
+
+List_of_years = []
+for i in range(100):
+    year = 2000+i
+    List_of_years.append(str(year))
+
+date_format = '%m.%d.%Y'
+
+
+def forMatName_with_yearStrip(item, item_id=None):
+    """ String formatting   """
+
+    # '-' format:   Converts '-' to ' - '
+    item = item.replace('-', ' - ')
+    # Space format: Removes more than 2 spaces from name
+    for num in range(10, 1, -1):
+        spacing = "{:{}}".format('', num)
+        item = item.replace(spacing, ' ')
+
+    # Strip Date Format: Removes Date form end of name
+    item = item.split(' ')
+    Date_Str = item[-1]
+    try:
+        trimmed_Name = ""
+        date_obj = datetime.datetime.strptime(Date_Str, date_format)
+        ###############################################################################################
+        if Date_Str[-2]=='-':
+            L=len(item) - 2
+        else:
+            L=len(item) - 1
+        for i in range(0,L):
+            trimmed_Name = trimmed_Name + " " + item[i]
+        # trimmed_Name = trimmed_Name.replace(" ", "", 1)
+        item = trimmed_Name
+        item_id = trimmed_Name
+        ###############################################################################################
+    except ValueError:
+        trimmed_Name = ""
+        if item[-1] in List_of_years:
+            # print("years:",item[-1])
+            item.pop()
+            if item[-1] == '-':
+                item.pop()
+        for i in range(0, len(item)):
+            trimmed_Name = trimmed_Name + " " + item[i]
+
+    trimmed_Name = trimmed_Name.replace(" ", "", 1)
+    trimmed_Name = trimmed_Name.replace(" ", "_")
+    trimmed_Name = trimmed_Name.replace("/", "_-_")
+    trimmed_Name = trimmed_Name.replace("\\", "_-_")
+    trimmed_Name = trimmed_Name.replace("&", "AND")
+    trimmed_Name = trimmed_Name.replace(",", "_")
+    trimmed_Name = trimmed_Name.replace("__", "_")
+    if trimmed_Name[-1] == '_':
+        trimmed_Name = trimmed_Name[:-1]
+    return trimmed_Name, item_id
+
+
+"""     MAIN     """
+
+#   Get Source Path
+start_time = time.time()
+#path = "C:/Users/arun_lalksankar/Documents/Indexed_Docs-ARUN/"
+path = "E:/TBirds/TBirdDOCS/inner/ab/"
+List_of_folders = os.listdir(path)
+for folder in List_of_folders:
+    source_path = path+folder+"/"
+    List_of_files_in_folder = os.listdir(source_path)
+    for file in List_of_files_in_folder:
+        source_path = path + folder + "/"
+        is_pdf_name = file.split(".")
+        if is_pdf_name[-1] == "pdf":
+            filename = file
+            file_title = is_pdf_name[0]
+            file_title = file_title.replace(" ", "_")
+            old_pdf_name = source_path+file
+            new_pdf_name = source_path+file_title+".pdf"
+            os.rename(old_pdf_name, new_pdf_name)
+            source_path = new_pdf_name
+            Script_exe_path = "C:/Users/arun_lalksankar/PycharmProjects/AUTOINDEXING/venv/Splitter"
+            Out_Dir = "C:/Users/arun_lalksankar/Desktop/DOCS/"
+            reader = PyPDF2.PdfFileReader(source_path)
+
+            # Get Dictionary of Bookmarks for form {Page_Number : Title of Document,...}
+            BookMarks = (bookmark_dict(reader.getOutlines()))
+            Total_Number_pages = reader.getNumPages()
+            Pages = list(BookMarks.keys())
+            Pages.sort()
+            # List of Documents Found
+            Classes_List = os.listdir(Out_Dir+"/train/")
+            R = ""
+            C = 0
+            for PageR in range(0, Total_Number_pages):
+                # for Page in Pages:
+                # Conversion error correction
+
+                if PageR in Pages:
+                    # Get Trimmed name for deciding the folder
+
+                    print("New "+str(BookMarks[PageR]))
+                    Simplified_Name, filler = forMatName_with_yearStrip(str(BookMarks[PageR]))
+                    Identity_Name = file_title+"--"+Simplified_Name
+                    R = Simplified_Name 
+                    C = 1
+                else:
+                    print("Next-Page of Prev Type")
+                    C = C + 1
+                    Simplified_Name = R+"--Page"+str(C)
+                    Identity_Name = file_title + "--" + Simplified_Name
+
+                Page = PageR + 1
+                # Convert that page to png
+                Script_Command = "{}/pdftopng -f {} -l {} {} {}{}".format(Script_exe_path, Page, Page,
+                                                                          source_path, Out_Dir, Identity_Name)
+                print(Script_Command)
+                os.system(Script_Command)
+                Png_Source_Name = "{}{}-{:06d}.png".format(Out_Dir, Identity_Name, Page)
+                print(Png_Source_Name+"\n")
+                if Simplified_Name in Classes_List:
+                    try:
+                        picture_destination = "{}train/{}/{}-{}.png".format(Out_Dir, Simplified_Name,
+                                                                            Identity_Name, Page)
+                        shutil.copyfile(Png_Source_Name, picture_destination)
+            # picture_destination2 = "{}validation/{}/{}-{}.png".format(Out_Dir, Simplified_Name, Identity_Name, Page)
+                        # shutil.copyfile(picture_destination, picture_destination2)
+                    except FileNotFoundError:
+                        print("Small Problem T_T\n\n")
+
+                else:
+                    # Add to list and create Folder
+                    Classes_List.append(Simplified_Name)
+                    # Need to make a copy in both Train and Validation folders
+                    new_Dir1 = "{}train/{}".format(Out_Dir, Simplified_Name)
+                    # new_Dir2 = "{}validation/{}".format(Out_Dir, Simplified_Name)
+                    try:
+                        os.mkdir(new_Dir1)
+                    except OSError:
+                        print("Already present {}".format(new_Dir1))
+                    else:
+                        print("Successfully Created {}".format(new_Dir1))
+
+                    picture_destination = "{}/{}-{}.png".format(new_Dir1, Identity_Name, Page)
+                    try:
+                        shutil.copyfile(Png_Source_Name, picture_destination)
+                    except FileNotFoundError:
+                        print("Failed T_T")
+
+                try:
+                    os.remove(Png_Source_Name)
+                except PermissionError:
+                    print("Slow system hmmmm?")
+                    continue
+                except FileNotFoundError:
+                    print("What ? No file found to delete!!")
+                    continue
+
+            print("Time Taken = "+str((time.time()-start_time)/60))
